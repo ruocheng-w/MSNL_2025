@@ -4,10 +4,8 @@ from skimage import io, color, transform  # image processing: reading, grayscale
 from sklearn.preprocessing import normalize  # normalises rows of a matrix
 import pywt  # PyWavelets
 import cvxpy as cp  # convex optimisation
-import os
 from datetime import datetime
 import time
-from scipy.linalg import hadamard
 
 
 # --- Step 1: Load and preprocess image ---
@@ -35,11 +33,6 @@ def wavelet_unsparsify(coeff_arr, coeff_slices):  # inverse transform
 
 # --- Step 2': Construct image array without Wavelet Transform
 def vectorise(img):
-    # [m, n] = img.shape
-    # vec = np.array([])
-    # for i in range(n):
-    #     vec = np.concatenate((vec, img[:, i]))
-    # return vec
     return img.T.flatten()
 
 def unvectorise(vec, m):
@@ -53,24 +46,11 @@ def unvectorise(vec, m):
 
 
 # --- Step 3: Create measurement matrix Phi and simulate y = Phi x ---
-
-def fourier_matrix(m, n):
-    # Create a matrix of complex exponentials
-    F = np.exp(-2j * np.pi * np.outer(np.arange(m), np.arange(n)) / n)
-    return F
-
-
-
 def compress_measurements(x, m):
     n = len(x)
     np.random.seed(42)
     Phi = np.random.randn(m, n)  # random Gaussian
     Phi = normalize(Phi, axis=1)  # make rows unit norm
-#    Phi = normalize(Phi, axis=0)  # normalise columns, unit norm frame
-#    Phi = np.random.choice([1, -1], size=(m, n)) / np.sqrt(m)  # random Bernoulli
-#    H = hadamard(m) / np.sqrt(m)  # Hadamard matrix, [I_m, H]
-#    Phi = np.hstack((np.eye(m), H))
-#    Phi = fourier_matrix(m, n)
     y = Phi @ x
     return y, Phi
 
@@ -79,25 +59,19 @@ def compress_measurements(x, m):
 def reconstruct_l1(Phi, y):
     n = Phi.shape[1]  # number of columns, i.e. size of image vector
     s_hat = cp.Variable(n)
-
-    # TV Regularization (l1 norm of the gradient)
-    # tv_norm = cp.sum(cp.abs(s_hat[:-1] - s_hat[1:]))  # Simple finite difference (gradient)
     objective = cp.Minimize(cp.norm1(s_hat))
     constraints = [Phi @ s_hat == y]
     prob = cp.Problem(objective, constraints)
-#c    prob.solve(solver=cp.SCS)
-    prob.solve(solver=cp.ECOS)  # alternative solver for l_1 problem, not significantly faster
+    prob.solve(solver=cp.ECOS)  
     return s_hat.value
 
 # size m*n, c*m*n measurements
 def compressed_sensing(M, N, c):
     start_time = time.time()
-    # img = load_image("/Users/ruochengwang/Desktop/Screenshot 2024-07-25 at 19.29.25.png", size=(M, N))
-    img = load_image("/Users/ruochengwang/Desktop/Man.jpeg", size=(64, 64))
-    img = 1 - img
-    # coeff_arr, coeff_slices = wavelet_sparsify(img)  # wavelet transform
-    # x = coeff_arr.flatten()
-    x = vectorise(img)  # without wavelet transform
+    img = load_image("your_file", size=(M, N))
+    coeff_arr, coeff_slices = wavelet_sparsify(img)  # wavelet transform
+    x = coeff_arr.flatten()
+    # x = vectorise(img)  # without wavelet transform
 
     # Compressed sensing: take 30% measurements
     m = int(c * len(x))
@@ -105,25 +79,22 @@ def compressed_sensing(M, N, c):
 
     # Reconstruct
     x_reconstructed = reconstruct_l1(Phi, y)
-    # coeffs_reconstructed = x_reconstructed.reshape(coeff_arr.shape)  # with wavelet transform
-    # img_reconstructed = wavelet_unsparsify(coeffs_reconstructed, coeff_slices)
-    img_reconstructed = unvectorise(x_reconstructed, N)
-    # img_reconstructed[img_reconstructed > 0.8] = 1
+    coeffs_reconstructed = x_reconstructed.reshape(coeff_arr.shape)  # with wavelet transform
+    img_reconstructed = wavelet_unsparsify(coeffs_reconstructed, coeff_slices)
+    # img_reconstructed = unvectorise(x_reconstructed, N)
 
     # Show results
-    img = 1 - img
-    img_reconstructed = 1 - img_reconstructed
     MSE = 1 / (M * N) * np.linalg.norm(img - img_reconstructed, ord='fro')
     # fig, axs = plt.subplots(1, 2, figsize=(10, 5))
     # print(MSE)
     # axs[0].imshow(img, cmap='gray')
     # axs[0].set_title("Original Image")
     # axs[1].imshow(np.clip(img_reconstructed, 0, 1), cmap='gray')
-    # axs[1].set_title("Reconstructed Image" + str(c) + "(30%)")
+    # axs[1].set_title("Reconstructed Image " + str(c * 100) + "%")
     # for ax in axs: ax.axis('off')
     # plt.tight_layout()
     # fig.subplots_adjust(top=0.9)
-    # filename = f"/Users/ruochengwang/Documents/PyCharm/Compressed Sensing/Output/reconstructed_image_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf"
+    # filename = "your_file"
     # fig.savefig(filename)
     # plt.show()
     # plt.close()
@@ -133,8 +104,6 @@ def compressed_sensing(M, N, c):
     return MSE
 
 if __name__ == "__main__":
-    print("Current working directory:", os.getcwd())
-    print("Output folder exists:", os.path.exists("Output"))
     k = 6
     M = 64
     N = 64
@@ -149,6 +118,7 @@ if __name__ == "__main__":
     plt.ylabel('MSE')
     plt.title('MSE vs Percentage')
     plt.grid(True)
-    name = f"/Users/ruochengwang/Documents/PyCharm/Compressed Sensing/Plot/Plot_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf"
+    name = "your_filef"
     plt.savefig(name)
     plt.show()
+    plt.close()
